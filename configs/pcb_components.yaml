@@ -1,0 +1,32 @@
+# 将 path 修改为你自己的 YOLO 数据集根目录。
+# 目录结构：
+# dataset/
+#   images/train, images/val, images/test
+#   labels/train, labels/val, labels/test
+path: dataset
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: battery
+  1: button
+  2: buzzer
+  3: capacitor
+  4: clock
+  5: connector
+  6: diode
+  7: display
+  8: fuse
+  9: heatsink
+  10: ic
+  11: inductor
+  12: led
+  13: pads
+  14: pins
+  15: potentiometer
+  16: relay
+  17: resistor
+  18: switch
+  19: transformer
+  20: transistor

@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Models / training artifacts
+models/*.pt
+models/*.onnx
+runs/
+dataset/
+
+# User outputs
+outputs/
+*.csv
+*.json
+!examples/*.json
+
+# IDE / OS / local tooling
+.vscode/
+.idea/
+.devspace-computer/
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+*.key
