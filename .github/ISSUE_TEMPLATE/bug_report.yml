@@ -1,0 +1,57 @@
+name: Bug 报告
+description: 报告识别、计数、视频或摄像头功能中的问题
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题描述
+      description: 请说明实际发生了什么，以及你期望的结果。
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: 输入模式
+      options:
+        - 上传图片
+        - 上传视频
+        - 实时摄像头
+        - 命令行
+        - 训练/微调
+        - 其他
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 项目版本
+      placeholder: 例如 v1.1.0
+
+  - type: input
+    id: environment
+    attributes:
+      label: 运行环境
+      placeholder: 例如 Windows 11 / Python 3.13 / CPU 或 CUDA
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 启动 streamlit run app.py
+        2. 选择实时摄像头
+        3. 点击 START
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志或截图
+      description: 可粘贴报错日志，或拖入截图。
+      render: shell

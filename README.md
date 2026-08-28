@@ -11,7 +11,10 @@
 - 自动统计每一类元器件数量和总数量
 - 高分辨率 PCB **切片推理**，提升小电阻、小电容等小目标的可见度
 - 跨切片按类别 NMS 去重，降低重叠区域重复计数
-- Streamlit 图形界面
+- Streamlit 图形界面，支持图片、视频文件和浏览器摄像头三种输入方式
+- 浏览器摄像头 WebRTC 实时检测，持续叠加检测框、置信度和当前分类计数
+- 本地视频逐帧检测，并导出带标注的结果视频
+- 视频检测支持“每 N 帧推理一次”，在实时性和算力占用之间灵活平衡
 - 命令行批处理入口
 - 输出标注图片、CSV 逐目标明细、JSON 汇总报告
 - 支持替换任意 Ultralytics 兼容 `.pt` / `.onnx` 权重
@@ -109,12 +112,16 @@ streamlit run app.py
 
 操作流程：
 
-1. 上传 PCB 图片；
+1. 在首页选择输入方式：`上传图片`、`上传视频` 或 `实时摄像头`；
 2. 设置置信度阈值和推理分辨率；
-3. 对高分辨率 PCB 或密集小元器件开启切片推理；
-4. 点击“开始识别并统计”；
-5. 查看标注结果和分类数量；
-6. 导出 CSV、JSON 和标注图片。
+3. 静态高清 PCB 图片可开启切片推理；实时视频建议先关闭切片；
+4. 图片模式点击“开始识别并统计”，可导出标注图、CSV 和 JSON；
+5. 视频模式点击“开始视频检测”，可导出带检测框和当前计数的结果视频；
+6. 实时摄像头模式点击 WebRTC 的 `START`，允许浏览器访问摄像头后即可持续检测。
+
+实时模式默认建议使用 640 推理分辨率、每 2~3 帧检测一次。CPU 环境下这样通常更流畅；GPU 性能充足时可设置为每帧检测。远程部署摄像头模式时浏览器需要 HTTPS，本机通过 `localhost` 使用不受影响。
+
+更详细说明见 [`docs/VIDEO_AND_CAMERA.md`](docs/VIDEO_AND_CAMERA.md)。
 
 ## 命令行使用
 
@@ -186,10 +193,12 @@ PCB-Component-Inspector/
 │  ├─ detector.py                # 检测、切片、NMS
 │  ├─ model_registry.py          # 模型管理
 │  ├─ reporting.py               # CSV / JSON / 统计
+│  ├─ video.py                   # 视频/摄像头逐帧检测流水线
 │  ├─ visualize.py               # 检测结果绘制
 │  └─ cli.py                     # 命令行入口
 ├─ tests/                         # 自动测试
 ├─ .github/workflows/ci.yml      # GitHub Actions CI
+├─ .github/workflows/release.yml # Tag 推送时自动创建 GitHub Release
 ├─ CHANGELOG.md
 ├─ CONTRIBUTING.md
 ├─ LICENSE

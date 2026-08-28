@@ -1,0 +1,26 @@
+name: 功能建议
+description: 提议新的识别、视频、部署或工程能力
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: 使用场景
+      description: 请说明你为什么需要这个功能，以及当前遇到的限制。
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 期望方案
+      description: 描述你希望项目如何工作。
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息
+      description: 可提供示例图片、视频、模型信息或相关说明。

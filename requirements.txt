@@ -4,5 +4,7 @@ numpy>=1.26
 pandas>=2.2
 Pillow>=10.4
 streamlit>=1.38
+streamlit-webrtc>=0.77,<1
+av>=15.1,<18
 huggingface-hub>=0.27
 PyYAML>=6.0

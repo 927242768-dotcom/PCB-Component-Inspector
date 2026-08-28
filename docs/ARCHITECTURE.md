@@ -44,13 +44,23 @@ PCB-Component-Inspector 用于从 PCB 图像中检测板载元器件，输出每
 - 类别名称；
 - 置信度。
 
+### `video.py`
+
+负责视频与摄像头逐帧检测，包括：
+
+- 统一的视频帧推理参数；
+- 线程安全的逐帧处理；
+- 每 N 帧执行一次 YOLO 的性能控制；
+- 中间帧复用最近一次检测结果；
+- 每帧检测框与当前分类计数叠加。
+
 ### `cli.py`
 
 提供命令行入口，适合批处理、脚本调用和自动化任务。
 
 ### `app.py`
 
-提供 Streamlit 图形界面，适合直接上传图片、调整参数并下载结果。
+提供 Streamlit 图形界面，支持静态图片、上传视频与 WebRTC 浏览器摄像头实时检测。
 
 ## 3. 推理流程
 
@@ -89,6 +99,36 @@ Final detections
         +--> CSV / JSON
 ```
 
+### 视频与实时摄像头模式
+
+```text
+Video file / Browser camera
+        |
+        v
+Decode current frame
+        |
+        v
+FrameDetectionPipeline
+        |
+        +--> YOLO every N frames
+        |        |
+        |        v
+        |   Current detections
+        |        |
+        +<-------+
+        |
+        v
+Reuse latest detections on skipped frames
+        |
+        v
+Draw boxes + current counts
+        |
+        +--> WebRTC live return
+        +--> Annotated MP4 output
+```
+
+实时模式的计数表示当前帧同时检测到的元器件数量，不对连续帧做累加，避免同一器件在视频中被重复计数。
+
 ## 4. 切片设计
 
 切片之间保留一定重叠区域，避免元器件刚好落在切片边界时被截断。
@@ -115,7 +155,8 @@ Final detections
 
 后续可以继续增加：
 
-- 视频与工业相机实时识别；
+- RTSP / USB 工业相机直连；
+- 跨帧目标跟踪与唯一器件 ID；
 - 批量文件夹检测；
 - ONNX / TensorRT / OpenVINO 加速；
 - 自定义类别配置；
