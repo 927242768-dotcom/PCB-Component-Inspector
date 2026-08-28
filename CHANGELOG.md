@@ -2,6 +2,26 @@
 
 本项目遵循语义化版本（Semantic Versioning）。
 
+## [2.1.0] - 2026-08-28
+
+### Added
+
+- 新增紫光同创 `PG2L100H-6-FBG484` + RK3568 的实际板级目标支持，FPGA 工具链固定为 PDS 2022.2-SP6.4。
+- 新增 PG2L100H 专用 128-bit PCIe BAR0 图像预处理 RTL，支持 3×3 Gaussian、Sobel、动态阈值、ROI、旁路和状态统计。
+- 新增 64 KB 单 BAR0 共享窗口协议，默认使用 112×64 Gray8 帧，状态签名为 `0x50434250`。
+- 新增 RK3568 Linux `resource0` mmap 客户端，实现 FPGA 配置、灰度帧写入、start/done 握手和输出读回。
+- 新增 PG2L100H 板级 FDC、PDS 本地工程生成器、PCIe 热下载后重枚举脚本与板端一键运行脚本。
+- 新增 PG2L100H/PDS 架构、上板、简历与面试说明文档。
+- 新增 BAR0 协议、帧尺寸、状态解析与 mmap 文件后端测试；测试总数增至 12 项。
+- GitHub CI/Release 增加 PG2L100H 专用 RTL 的 Icarus Verilog 编译检查。
+
+### Changed
+
+- 板端主路径由通用 UIO/VDMA 描述切换为 PG2L100H PCIe Endpoint + RK3568 `resource0` 的实际通信方式。
+- ARM 实时入口改为高清原图 YOLO 与 112×64 FPGA 预处理双路径并行架构。
+- 项目版本升级至 2.1.0。
+- 文档补充同一 PG2L100H + RK3568 + PCIe 100H 平台的已上板 PDS 实现基线：250/125 MHz 用户时钟、WNS +0.558/+0.492 ns、LUT/REG/DRM 约 15.2%/3.7%/44.8%，并明确其为平台基线而非 PCB 专用核独立测量值。
+
 ## [2.0.0] - 2026-08-28
 
 ### Added

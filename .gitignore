@@ -12,6 +12,13 @@ models/*.onnx
 runs/
 dataset/
 
+# Local PDS/vendor project and generated bitstreams
+# PANGO PCIe/IP demo sources are vendor materials and must not be redistributed.
+fpga/local_pds/
+fpga/bitstream/*.sbit
+fpga/bitstream/*.bgr
+fpga/bitstream/*.sfc
+
 # User outputs
 outputs/
 *.csv

@@ -1,84 +1,143 @@
-# FPGA + ARM 上板验收步骤
+# PG2L100H + RK3568 上板验收步骤
 
-本文件用于把仓库中的 RTL/ARM 代码真正闭环到开发板。未完成某项实测前，不应把对应指标写进简历。
+本项目板端固定使用紫光同创 `PG2L100H-6-FBG484`、RK3568 和 PDS `2022.2-SP6.4`。不再按 Vivado/UIO/VDMA 路线描述。
 
-## 1. Vivado/Quartus 侧
+## 1. 生成 PDS 本地工程
 
-1. 确认目标 FPGA 型号、视频输入接口和像素时钟。
-2. 将 `fpga/rtl/` 加入工程。
-3. 以 `pcb_preprocess_top` 作为视频数据面 IP 核。
-4. 以 `pcb_preprocess_regs` 作为控制面寄存器核。
-5. 将视频源 AXI4-Stream 接到预处理核，再接 VDMA/Frame Buffer/PCIe DMA。
-6. 将 AXI-Lite 控制口连接 PS 总线或 PCIe BAR。
-7. 设置 `IMAGE_WIDTH` 为真实输入宽度。
-8. 完成综合、实现、时序收敛并导出 bitstream。
-9. 保存 utilization 和 timing summary，作为简历数据来源。
+在 Windows 开发机执行：
 
-## 2. Linux/ARM 侧
-
-确认 UIO：
-
-```bash
-ls -l /dev/uio*
-cat /sys/class/uio/uio0/name
+```powershell
+cd D:\PCB-Component-Inspector
+python scripts\prepare_pds_100h.py --force
 ```
 
-检查寄存器：
+生成：
 
-```bash
-python scripts/fpga_ctl.py --uio /dev/uio0
+```text
+fpga\local_pds\pcie_dma_test_100h\pcie_dma_test.pds
 ```
 
-配置 Sobel：
+该目录包含本机 PANGO PCIe/DMA 工程和本项目 PCB 专用 RTL，但由于厂商源码许可限制已加入 `.gitignore`，不会上传 GitHub。
 
-```bash
-python scripts/fpga_ctl.py --uio /dev/uio0 --sobel on --threshold-enable off
+## 2. PDS 实现
+
+使用 PDS 2022.2-SP6.4 打开生成的 `.pds`，确认器件：
+
+```text
+Family  Logos2
+Device  PG2L100H
+Speed   -6
+Package FBG484
 ```
 
-配置 Sobel + 二值化：
+确认工程中存在：
 
-```bash
-python scripts/fpga_ctl.py --uio /dev/uio0 --sobel on --threshold-enable on --threshold 96
+```text
+hdl/pcb_preprocess/pango100h_pcb_register_bank.v
+hdl/pcb_preprocess/pango100h_pcb_preprocess_bar0.v
 ```
 
-## 3. 视频链路
+并确认 PCIe DMA 的 BAR0 实例已经连接到 `u_pango100h_pcb_preprocess`。
 
-确认 V4L2 节点：
+然后执行完整流程：综合、Device Map、Place & Route、Timing Analysis、Generate Bitstream。
+
+## 3. 保存实现证据
+
+PCB 专用工程实现完成后保存：
+
+- `.sbit`
+- LUT / REG / DRM 资源利用率
+- pclk / pclk_div2 时序结果
+- WNS / TNS
+- 功耗报告（如需要）
+
+这些才是简历中允许填写的本项目量化数据。
+
+## 4. 热下载后恢复 PCIe
+
+将 `.sbit` 热下载到 PG2L100H 后，在 RK3568 执行：
 
 ```bash
-v4l2-ctl --list-devices
-v4l2-ctl -d /dev/video0 --all
+cd /home/linaro/PCB-Component-Inspector
+sudo sh scripts/board_100h_setup.sh
 ```
 
-先只验证视频，不跑 YOLO；确认分辨率、帧率、行尾和帧首标记均正确。
+脚本会完成 Endpoint remove、PCI rescan、enable 和 `setpci COMMAND=0006`。
 
-随后运行：
+目标 PCI 设备：
+
+```text
+0002:21:00.0
+```
+
+BAR0：
+
+```text
+/sys/bus/pci/devices/0002:21:00.0/resource0
+```
+
+## 5. 检查 FPGA 状态签名
 
 ```bash
-python scripts/arm_fpga_realtime.py \
-  --camera /dev/video0 \
-  --uio /dev/uio0 \
-  --imgsz 640 \
-  --infer-every 2
+sudo python3 scripts/fpga_ctl.py
 ```
 
-## 4. 必做 A/B 对比
+PCB 专用 FPGA 核的签名必须为：
 
-至少测试两组：
+```text
+0x50434250
+```
 
-- A：FPGA Sobel/threshold bypass，只走原始视频；
-- B：启用 FPGA 预处理。
+如果仍看到其他签名，说明当前下载的不是 PCB 专用 bitstream。
 
-记录：
+## 6. 最小图像闭环
 
-| 指标 | ARM-only / bypass | FPGA preprocess |
+默认 FPGA 输入：
+
+```text
+112 x 64 Gray8 = 7168 bytes
+```
+
+BAR0：
+
+```text
+0x000~0x0ff  control/status
+0x100~       frame input/output
+```
+
+默认预处理：
+
+```text
+Gaussian 3x3 -> Sobel 3x3 -> threshold
+```
+
+ARM 写灰度帧、触发 start、轮询 done，再从 `0x100` 读取 FPGA 结果。
+
+## 7. 实时检测
+
+```bash
+sudo -E sh scripts/run_100h_pcb.sh
+```
+
+运行链路：
+
+```text
+Camera 1280x720
+  ├─ 原始高清帧 -> YOLOv8 -> PCB 元器件分类/定位/计数
+  └─ resize 112x64 Gray -> PCIe BAR0 -> PG2L100H -> mask/edge readback
+```
+
+## 8. 必做 A/B 测试
+
+至少记录：
+
+| 指标 | FPGA bypass | FPGA preprocess |
 | --- | ---: | ---: |
-| 输入 FPS |  |  |
+| FPGA 单帧处理时间 |  |  |
+| 摄像头实时 FPS |  |  |
 | YOLO FPS |  |  |
 | ARM CPU 占用 |  |  |
 | 端到端延迟 |  |  |
-| 计数准确率 |  |  |
+| 元器件计数准确率 |  |  |
 
-## 5. 简历允许写的条件
-
-只有完成真实板卡验证后，才把“实现 FPGA 实时预处理并达到 XX FPS / 降低 XX% CPU 占用”等定量表述写入简历。当前仓库已经具备 RTL 和软件闭环代码，但资源利用率、时钟频率、功耗和真实帧率必须来自目标板实际报告。
+没有实测前不要填写性能提升百分比。

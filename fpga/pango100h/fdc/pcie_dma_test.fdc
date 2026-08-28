@@ -1,0 +1,51 @@
+### PG2L100H-6-FBG484 / 100H board constraints
+### PDS 2022.2-SP6.4
+
+create_clock -name {pclk} [get_pins {u_ips2l_pcie_wrap.U_IPS2L_PCIE_TOP.U_IPS2L_HSSTLP_PCIE_SOFT_PHY.pclk}] -period {4.000} -waveform {0.000 2.000}
+create_clock -name {pclk_div2} [get_pins {u_ips2l_pcie_wrap.U_IPS2L_PCIE_TOP.U_IPS2L_HSSTLP_PCIE_SOFT_PHY.pclk_div2}] -period {8.000} -waveform {0.000 4.000}
+create_clock -name {ref_clk} [get_pins {u_ips2l_pcie_wrap.U_IPS2L_PCIE_TOP.U_IPS2L_HSSTLP_PCIE_SOFT_PHY/P_REFCK2CORE_0}] -period {10.000} -waveform {0.000 5.000}
+
+set_clock_groups -name group_1 -asynchronous -group [get_clocks {pclk}]
+set_clock_groups -name group_2 -asynchronous -group [get_clocks {pclk_div2}]
+set_clock_groups -name group_3 -asynchronous -group [get_clocks {ref_clk}]
+
+# 3x3 word operation is intentionally held across multiple pclk_div2 cycles.
+set_multicycle_path -to [get_cells -hier {*processed_word_reg*}] -setup 3 -end
+set_multicycle_path -to [get_cells -hier {*processed_word_reg*}] -hold 2 -end
+set_multicycle_path -to [get_cells -hier {*final_word_reg*}] -setup 3 -end
+set_multicycle_path -to [get_cells -hier {*final_word_reg*}] -hold 2 -end
+
+define_attribute {i:u_ips2l_pcie_wrap.U_IPS2L_PCIE_TOP.U_IPS2L_HSSTLP_PCIE_SOFT_PHY.x2.GTP_HSST_2LANE_TOP.U_GTP_HSSTLP_WRAPPER.PLL0_ENABLE.U_GTP_HSSTLP_PLL0} {PAP_LOC} {HSSTLP_364_918:U0_HSSTLP_PLL}
+define_attribute {i:u_ips2l_pcie_wrap.U_IPS2L_PCIE_TOP.U_IPS2L_HSSTLP_PCIE_SOFT_PHY.x2.GTP_HSST_2LANE_TOP.U_GTP_HSSTLP_WRAPPER.CHANNEL0_ENABLE.U_GTP_HSSTLP_LANE0} {PAP_LOC} {HSSTLP_364_918:U0_HSSTLP_LANE}
+define_attribute {i:u_ips2l_pcie_wrap.U_IPS2L_PCIE_TOP.U_IPS2L_HSSTLP_PCIE_SOFT_PHY.x2.GTP_HSST_2LANE_TOP.U_GTP_HSSTLP_WRAPPER.CHANNEL1_ENABLE.U_GTP_HSSTLP_LANE1} {PAP_LOC} {HSSTLP_364_918:U1_HSSTLP_LANE}
+
+define_attribute {p:button_rst_n} {PAP_IO_DIRECTION} {INPUT}
+define_attribute {p:button_rst_n} {PAP_IO_LOC} {M15}
+define_attribute {p:button_rst_n} {PAP_IO_VCCIO} {1.8}
+define_attribute {p:button_rst_n} {PAP_IO_STANDARD} {LVCMOS18}
+define_attribute {p:button_rst_n} {PAP_IO_NONE} {TRUE}
+
+define_attribute {p:ref_led} {PAP_IO_DIRECTION} {OUTPUT}
+define_attribute {p:ref_led} {PAP_IO_LOC} {M17}
+define_attribute {p:ref_led} {PAP_IO_VCCIO} {1.8}
+define_attribute {p:ref_led} {PAP_IO_STANDARD} {LVCMOS18}
+define_attribute {p:ref_led} {PAP_IO_DRIVE} {4}
+define_attribute {p:ref_led} {PAP_IO_PULLUP} {TRUE}
+define_attribute {p:ref_led} {PAP_IO_SLEW} {SLOW}
+
+define_attribute {p:pclk_led} {PAP_IO_DIRECTION} {OUTPUT}
+define_attribute {p:pclk_led} {PAP_IO_LOC} {J16}
+define_attribute {p:pclk_led} {PAP_IO_VCCIO} {1.8}
+define_attribute {p:pclk_led} {PAP_IO_STANDARD} {LVCMOS18}
+define_attribute {p:pclk_led} {PAP_IO_DRIVE} {4}
+define_attribute {p:pclk_led} {PAP_IO_PULLUP} {TRUE}
+define_attribute {p:pclk_led} {PAP_IO_SLEW} {SLOW}
+
+define_attribute {p:perst_n} {PAP_IO_DIRECTION} {INPUT}
+define_attribute {p:perst_n} {PAP_IO_LOC} {M16}
+define_attribute {p:perst_n} {PAP_IO_VCCIO} {1.8}
+define_attribute {p:perst_n} {PAP_IO_STANDARD} {LVCMOS18}
+define_attribute {p:perst_n} {PAP_IO_NONE} {TRUE}
+
+define_attribute {p:ref_clk_p} {PAP_IO_LOC} {F6}
+define_attribute {p:ref_clk_n} {PAP_IO_LOC} {E6}

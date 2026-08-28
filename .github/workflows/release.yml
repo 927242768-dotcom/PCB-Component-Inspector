@@ -40,6 +40,7 @@ jobs:
         run: |
           iverilog -g2012 -Wall -s pcb_preprocess_top -o /tmp/pcb_preprocess.vvp fpga/rtl/*.v
           iverilog -g2012 -Wall -s pcb_preprocess_regs -o /tmp/pcb_regs.vvp fpga/rtl/*.v
+          iverilog -g2012 -Wall -s pango100h_pcb_preprocess_bar0 -o /tmp/pango100h_pcb.vvp fpga/rtl/*.v
 
       - name: Create GitHub Release
         env:

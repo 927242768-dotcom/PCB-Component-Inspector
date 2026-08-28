@@ -2,14 +2,15 @@
 
 一个面向 FPGA 简历与嵌入式视觉实践的 **FPGA + ARM 实时 PCB 元器件视觉检测系统**。
 
-项目采用异构软硬件协同架构：FPGA 通过 AXI4-Stream 对实时视频执行 RGB 转灰度、3×3 Sobel 和可配置阈值化，ARM Linux 通过 UIO/mmap 配置 FPGA 并负责视频调度，YOLOv8 完成 PCB 多类别元器件检测、分类、自动计数和报告导出。原有 PC 端图片/视频/摄像头检测继续保留，便于模型调试和没有开发板时的软件验证。
+板端目标平台为 **紫光同创 PG2L100H-6-FBG484 + RK3568**，FPGA 使用 **PDS 2022.2-SP6.4** 开发。RK3568 采集 1280×720 摄像头画面，其中一路保留高清图用于 YOLOv8 元器件识别，另一路缩放为 112×64 Gray8，经 PCIe BAR0 送入 PG2L100H 执行 3×3 Gaussian、Sobel 和动态阈值化，再从同一 BAR0 窗口读回 FPGA 输出。PC 端图片/视频/摄像头检测继续保留，用于模型调试和软件验证。
 
 ## 核心功能
 
-- **FPGA AXI4-Stream 实时像素流水线**：RGB888 → Gray8 → 3×3 Sobel → Threshold
-- **两级 line buffer + 横向移位寄存器**构造 3×3 窗口，采用 `|Gx|+|Gy|` 硬件友好梯度近似
-- **ARM Linux UIO/MMIO 控制面**：动态配置 Sobel、阈值模块和阈值参数
-- **ARM + FPGA + YOLO 实时链路**：FPGA 处理像素流，ARM 调度视频，YOLO 完成高层识别与计数
+- **PG2L100H + RK3568 实机架构**：PDS 2022.2-SP6.4 + PCIe Endpoint + 64 KB BAR0
+- **FPGA 图像预处理**：112×64 Gray8 → 3×3 Gaussian → 3×3 Sobel → 动态 Threshold
+- **128-bit BAR0 数据通路**：每个数据字承载 16 个灰度像素，支持跨 word 的 3×3 邻域访问
+- **RK3568 Linux mmap 控制/数据面**：通过 `/sys/bus/pci/devices/0002:21:00.0/resource0` 配置 FPGA、写入图像并读回结果
+- **ARM + FPGA + YOLO 异构实时链路**：FPGA 负责低层像素运算，ARM 负责摄像头与调度，YOLO 完成高层分类、定位和计数
 - YOLOv8 PCB 元器件目标检测
 - 默认支持 21 类板载对象：battery、button、buzzer、capacitor、clock、connector、diode、display、fuse、heatsink、ic、inductor、led、pads、pins、potentiometer、relay、resistor、switch、transformer、transistor
 - 自动统计每一类元器件数量和总数量
@@ -29,38 +30,27 @@
 ## 系统流程
 
 ```text
-Camera / Video
-      │
-      ▼
- AXI4-Stream RGB888
-      │
-      ▼
-┌────────────────────────┐
-│ FPGA / PL              │
-│ RGB2Gray               │
-│ 3×3 line buffer        │
-│ Sobel                  │
-│ Threshold (optional)   │
-└────────────────────────┘
-      │
-      ▼
-VDMA / PCIe DMA / V4L2
-      │
-      ▼
- ARM Linux
-      │
-      ├─ UIO/MMIO 配置 FPGA
-      └─ OpenCV 获取视频帧
-              │
-              ▼
-           YOLOv8
-              │
-      检测 / 分类 / 计数
-              │
-    可视化 / CSV / JSON
+USB Camera 1280×720
+        │
+        ├────────────── 原始高清帧 ──────────────→ YOLOv8
+        │                                         │
+        │                                分类 / 定位 / 计数
+        │                                         │
+        └→ resize + Gray 112×64                   │
+                    │                             │
+                    ▼                             │
+             PCIe BAR0 resource0                  │
+                    │                             │
+                    ▼                             │
+              PG2L100H FPGA                       │
+        Gaussian → Sobel → Threshold              │
+                    │                             │
+                    └──── BAR0 readback ──────────┘
+                                  │
+                         可视化 / CSV / JSON
 ```
 
-FPGA + ARM 详细架构见 [`docs/FPGA_ARM_ARCHITECTURE.md`](docs/FPGA_ARM_ARCHITECTURE.md)，上板步骤见 [`docs/FPGA_BRINGUP.md`](docs/FPGA_BRINGUP.md)。
+详细架构见 [`docs/FPGA_ARM_ARCHITECTURE.md`](docs/FPGA_ARM_ARCHITECTURE.md)，PDS 工程说明见 [`docs/PANGO100H_PDS.md`](docs/PANGO100H_PDS.md)，上板步骤见 [`docs/FPGA_BRINGUP.md`](docs/FPGA_BRINGUP.md)。
 
 ## 默认开源模型
 
@@ -99,12 +89,14 @@ FPGA + ARM 详细架构见 [`docs/FPGA_ARM_ARCHITECTURE.md`](docs/FPGA_ARM_ARCHI
 - CPU 可运行推理
 - NVIDIA GPU + CUDA 可显著加速推理和训练
 
-FPGA + ARM 上板环境还需要：
+FPGA + ARM 上板环境：
 
-- 支持 AXI4-Stream/视频 DMA 的 FPGA 或 SoC FPGA 平台；
-- ARM Linux + UIO（或可映射 PCIe BAR 的等价接口）；
-- V4L2/VDMA/PCIe DMA 视频数据通路；
-- Vivado/Quartus 等与目标 FPGA 匹配的综合实现工具。
+- 紫光同创 `PG2L100H-6-FBG484`；
+- RK3568 Linux；
+- PDS `2022.2-SP6.4`；
+- PCIe Endpoint `0002:21:00.0`；
+- `/sys/bus/pci/devices/0002:21:00.0/resource0` BAR0 映射；
+- USB/V4L2 摄像头，推荐 1280×720 MJPG。
 
 ## 安装
 
@@ -144,31 +136,41 @@ streamlit run app.py
 
 更详细说明见 [`docs/VIDEO_AND_CAMERA.md`](docs/VIDEO_AND_CAMERA.md)。
 
-## FPGA + ARM 使用
+## PG2L100H + RK3568 上板使用
 
-ARM 上先查看 FPGA 控制寄存器：
+先在 Windows 开发机生成本地 PDS 工程：
 
-```bash
-python scripts/fpga_ctl.py --uio /dev/uio0
+```powershell
+python scripts\prepare_pds_100h.py --force
 ```
 
-开启 Sobel，关闭二值化：
+输出：
 
-```bash
-python scripts/fpga_ctl.py --uio /dev/uio0 --sobel on --threshold-enable off
+```text
+fpga\local_pds\pcie_dma_test_100h\pcie_dma_test.pds
 ```
 
-运行完整 ARM + FPGA + YOLO 实时链路：
+使用 PDS 2022.2-SP6.4 完成实现并生成 PCB 专用 `.sbit`。热下载后在 RK3568 恢复 PCIe：
 
 ```bash
-python scripts/arm_fpga_realtime.py \
-  --camera /dev/video0 \
-  --uio /dev/uio0 \
-  --imgsz 640 \
-  --infer-every 2
+sudo sh scripts/board_100h_setup.sh
 ```
 
-RTL 位于 [`fpga/`](fpga/)。目前仓库提供可综合数据通路、控制寄存器和 ARM 软件；具体 XDC、时钟、设备树地址、VDMA/PCIe DMA Block Design 需要根据实际开发板生成。资源利用率、最高频率和真实 FPS 必须以上板报告为准。
+检查 BAR0 FPGA 状态：
+
+```bash
+sudo python3 scripts/fpga_ctl.py
+```
+
+运行完整 PG2L100H + RK3568 + YOLO 实时链路：
+
+```bash
+sudo -E sh scripts/run_100h_pcb.sh
+```
+
+板端自研 RTL 位于 [`fpga/rtl/`](fpga/rtl/)，板级说明见 [`fpga/pango100h/README.md`](fpga/pango100h/README.md)。PANGO PCIe/DMA 厂商源码只保留在本地生成目录，不上传公开仓库。
+
+同一套 PG2L100H + RK3568 + PCIe 100H 硬件平台此前已经完成 PDS 上板验证，平台实现基线为：`pclk=250 MHz`、`pclk_div2=125 MHz`，对应 WNS `+0.558 ns` / `+0.492 ns`，LUT/REG/DRM 使用率约 `15.2% / 3.7% / 44.8%`，实现报告为 `All Constraints Met`。这些数据用于说明同平台的时钟与资源基线；PCB 专用预处理核的增量资源、单帧耗时和端到端 FPS仍应以 PCB 专用 bitstream 的独立报告为准。
 
 ## 命令行使用
 
@@ -230,27 +232,39 @@ PCB-Component-Inspector/
 ├─ app.py                         # Streamlit 图形界面
 ├─ fpga/
 │  ├─ rtl/
-│  │  ├─ rgb2gray.v              # RGB888 -> Gray8
-│  │  ├─ sobel3x3_stream.v       # 两行缓存 3×3 Sobel
-│  │  ├─ threshold_stream.v      # 动态阈值化
-│  │  ├─ pcb_preprocess_top.v    # AXI4-Stream 数据面顶层
-│  │  └─ pcb_preprocess_regs.v   # AXI4-Lite 控制寄存器
-│  └─ README.md                   # FPGA 子系统说明
+│  │  ├─ pango100h_pcb_preprocess_bar0.v # PG2L100H BAR0 图像预处理顶层
+│  │  ├─ pango100h_pcb_register_bank.v   # PG2L100H BAR0 寄存器
+│  │  ├─ rgb2gray.v                      # 通用 RGB888 -> Gray8
+│  │  ├─ sobel3x3_stream.v               # 通用流式 3×3 Sobel
+│  │  ├─ threshold_stream.v              # 通用阈值化
+│  │  ├─ pcb_preprocess_top.v            # 通用 AXI4-Stream 顶层
+│  │  └─ pcb_preprocess_regs.v           # 通用 AXI4-Lite 寄存器
+│  ├─ pango100h/
+│  │  ├─ fdc/pcie_dma_test.fdc           # PG2L100H 板级/时序约束
+│  │  └─ README.md                       # 100H 板级集成说明
+│  └─ README.md                           # FPGA 子系统说明
 ├─ configs/
 │  └─ pcb_components.yaml        # 21 类数据集配置
 ├─ docs/
-│  ├─ ARCHITECTURE.md            # 系统架构与算法流程
+│  ├─ FPGA_ARM_ARCHITECTURE.md   # PG2L100H + RK3568 异构架构
+│  ├─ FPGA_BRINGUP.md            # 上板验收步骤
+│  ├─ PANGO100H_PDS.md           # PDS 工程生成与实现说明
+│  ├─ RESUME_PROJECT.md          # FPGA 简历与面试表述
+│  ├─ ARCHITECTURE.md            # 软件检测架构
 │  └─ DATASET.md                 # 数据、标注与精度提升
 ├─ scripts/
+│  ├─ prepare_pds_100h.py        # 生成本地 PG2L100H PDS 工程
+│  ├─ board_100h_setup.sh        # 热下载后的 PCIe 重枚举
+│  ├─ run_100h_pcb.sh            # RK3568 一键实时运行
+│  ├─ fpga_ctl.py                # BAR0 FPGA 验板/配置
+│  ├─ arm_fpga_realtime.py       # PG2L100H + RK3568 + YOLO 实时链路
 │  ├─ download_model.py          # 下载默认公开权重
-│  ├─ train.py                   # 训练/微调
-│  ├─ fpga_ctl.py                # ARM Linux FPGA 寄存器控制
-│  └─ arm_fpga_realtime.py       # ARM + FPGA + YOLO 实时演示
+│  └─ train.py                   # 训练/微调
 ├─ src/pcb_inspector/
 │  ├─ detector.py                # 检测、切片、NMS
 │  ├─ model_registry.py          # 模型管理
 │  ├─ reporting.py               # CSV / JSON / 统计
-│  ├─ fpga.py                    # UIO/MMIO FPGA 控制接口
+│  ├─ fpga.py                    # PG2L100H PCIe BAR0 / 通用 UIO 接口
 │  ├─ video.py                   # 视频/摄像头逐帧检测流水线
 │  ├─ visualize.py               # 检测结果绘制
 │  └─ cli.py                     # 命令行入口
