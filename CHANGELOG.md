@@ -2,6 +2,23 @@
 
 本项目遵循语义化版本（Semantic Versioning）。
 
+## [2.0.0] - 2026-08-28
+
+### Added
+
+- 新增 FPGA AXI4-Stream 实时图像预处理数据通路：RGB888 转灰度、3×3 Sobel、可配置阈值化。
+- 新增两级行缓存 + 横向移位寄存器的 3×3 窗口 RTL，实现 1 pixel/clock 流式结构。
+- 新增 AXI4-Lite 控制寄存器组，支持 ARM 动态控制 Sobel、阈值使能和阈值参数。
+- 新增 ARM Linux UIO/mmap 寄存器控制模块 `pcb_inspector.fpga`。
+- 新增 `scripts/fpga_ctl.py` FPGA 控制工具与 `scripts/arm_fpga_realtime.py` ARM+FPGA+YOLO 实时演示入口。
+- 新增 FPGA/ARM 架构、上板验收和 FPGA 简历项目文档。
+- 新增 FPGA 控制面自动测试。
+
+### Changed
+
+- 项目定位升级为 FPGA + ARM 异构实时 PCB 元器件视觉检测系统。
+- 版本升级至 2.0.0；保留原有图片、视频和浏览器摄像头纯软件模式作为兼容路径。
+
 ## [1.1.0] - 2026-08-28
 
 ### Added

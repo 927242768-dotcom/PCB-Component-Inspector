@@ -1,11 +1,15 @@
 # PCB-Component-Inspector
 
-一个独立的 **PCB 板载元器件识别、分类、自动计数与检测报告系统**。
+一个面向 FPGA 简历与嵌入式视觉实践的 **FPGA + ARM 实时 PCB 元器件视觉检测系统**。
 
-项目面向电子板卡图像分析场景，使用 YOLOv8 对 PCB 图像中的多类别、密集、小尺寸元器件进行目标检测，并在检测结果基础上完成分类计数、坐标记录、置信度统计、可视化标注以及 CSV / JSON 报告导出。
+项目采用异构软硬件协同架构：FPGA 通过 AXI4-Stream 对实时视频执行 RGB 转灰度、3×3 Sobel 和可配置阈值化，ARM Linux 通过 UIO/mmap 配置 FPGA 并负责视频调度，YOLOv8 完成 PCB 多类别元器件检测、分类、自动计数和报告导出。原有 PC 端图片/视频/摄像头检测继续保留，便于模型调试和没有开发板时的软件验证。
 
 ## 核心功能
 
+- **FPGA AXI4-Stream 实时像素流水线**：RGB888 → Gray8 → 3×3 Sobel → Threshold
+- **两级 line buffer + 横向移位寄存器**构造 3×3 窗口，采用 `|Gx|+|Gy|` 硬件友好梯度近似
+- **ARM Linux UIO/MMIO 控制面**：动态配置 Sobel、阈值模块和阈值参数
+- **ARM + FPGA + YOLO 实时链路**：FPGA 处理像素流，ARM 调度视频，YOLO 完成高层识别与计数
 - YOLOv8 PCB 元器件目标检测
 - 默认支持 21 类板载对象：battery、button、buzzer、capacitor、clock、connector、diode、display、fuse、heatsink、ic、inductor、led、pads、pins、potentiometer、relay、resistor、switch、transformer、transistor
 - 自动统计每一类元器件数量和总数量
@@ -25,28 +29,38 @@
 ## 系统流程
 
 ```text
-PCB 图片
-   │
-   ├─ 整图推理 ─────────────────────┐
-   │                                │
-   └─ 高分辨率切片推理              │
-          │                         │
-          └─ 坐标还原               │
-                 │                  │
-                 └──────┬───────────┘
-                        │
-                  按类别全局 NMS
-                        │
-                 元器件检测结果
-                        │
-          ┌─────────────┼─────────────┐
-          │             │             │
-       分类计数       可视化标注    结构化明细
-          │             │             │
-       汇总统计       JPG/PNG      CSV / JSON
+Camera / Video
+      │
+      ▼
+ AXI4-Stream RGB888
+      │
+      ▼
+┌────────────────────────┐
+│ FPGA / PL              │
+│ RGB2Gray               │
+│ 3×3 line buffer        │
+│ Sobel                  │
+│ Threshold (optional)   │
+└────────────────────────┘
+      │
+      ▼
+VDMA / PCIe DMA / V4L2
+      │
+      ▼
+ ARM Linux
+      │
+      ├─ UIO/MMIO 配置 FPGA
+      └─ OpenCV 获取视频帧
+              │
+              ▼
+           YOLOv8
+              │
+      检测 / 分类 / 计数
+              │
+    可视化 / CSV / JSON
 ```
 
-详细架构见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。
+FPGA + ARM 详细架构见 [`docs/FPGA_ARM_ARCHITECTURE.md`](docs/FPGA_ARM_ARCHITECTURE.md)，上板步骤见 [`docs/FPGA_BRINGUP.md`](docs/FPGA_BRINGUP.md)。
 
 ## 默认开源模型
 
@@ -78,12 +92,19 @@ PCB 图片
 
 ## 环境要求
 
-建议环境：
+软件验证环境：
 
-- Windows 10 / 11
-- Python 3.10 / 3.11
+- Windows 10 / 11 或 Linux
+- Python 3.10+
 - CPU 可运行推理
 - NVIDIA GPU + CUDA 可显著加速推理和训练
+
+FPGA + ARM 上板环境还需要：
+
+- 支持 AXI4-Stream/视频 DMA 的 FPGA 或 SoC FPGA 平台；
+- ARM Linux + UIO（或可映射 PCIe BAR 的等价接口）；
+- V4L2/VDMA/PCIe DMA 视频数据通路；
+- Vivado/Quartus 等与目标 FPGA 匹配的综合实现工具。
 
 ## 安装
 
@@ -122,6 +143,32 @@ streamlit run app.py
 实时模式默认建议使用 640 推理分辨率、每 2~3 帧检测一次。CPU 环境下这样通常更流畅；GPU 性能充足时可设置为每帧检测。远程部署摄像头模式时浏览器需要 HTTPS，本机通过 `localhost` 使用不受影响。
 
 更详细说明见 [`docs/VIDEO_AND_CAMERA.md`](docs/VIDEO_AND_CAMERA.md)。
+
+## FPGA + ARM 使用
+
+ARM 上先查看 FPGA 控制寄存器：
+
+```bash
+python scripts/fpga_ctl.py --uio /dev/uio0
+```
+
+开启 Sobel，关闭二值化：
+
+```bash
+python scripts/fpga_ctl.py --uio /dev/uio0 --sobel on --threshold-enable off
+```
+
+运行完整 ARM + FPGA + YOLO 实时链路：
+
+```bash
+python scripts/arm_fpga_realtime.py \
+  --camera /dev/video0 \
+  --uio /dev/uio0 \
+  --imgsz 640 \
+  --infer-every 2
+```
+
+RTL 位于 [`fpga/`](fpga/)。目前仓库提供可综合数据通路、控制寄存器和 ARM 软件；具体 XDC、时钟、设备树地址、VDMA/PCIe DMA Block Design 需要根据实际开发板生成。资源利用率、最高频率和真实 FPS 必须以上板报告为准。
 
 ## 命令行使用
 
@@ -181,6 +228,14 @@ PCB 上很多元器件属于小目标。整块板缩放到 640×640 后，小封
 ```text
 PCB-Component-Inspector/
 ├─ app.py                         # Streamlit 图形界面
+├─ fpga/
+│  ├─ rtl/
+│  │  ├─ rgb2gray.v              # RGB888 -> Gray8
+│  │  ├─ sobel3x3_stream.v       # 两行缓存 3×3 Sobel
+│  │  ├─ threshold_stream.v      # 动态阈值化
+│  │  ├─ pcb_preprocess_top.v    # AXI4-Stream 数据面顶层
+│  │  └─ pcb_preprocess_regs.v   # AXI4-Lite 控制寄存器
+│  └─ README.md                   # FPGA 子系统说明
 ├─ configs/
 │  └─ pcb_components.yaml        # 21 类数据集配置
 ├─ docs/
@@ -188,11 +243,14 @@ PCB-Component-Inspector/
 │  └─ DATASET.md                 # 数据、标注与精度提升
 ├─ scripts/
 │  ├─ download_model.py          # 下载默认公开权重
-│  └─ train.py                   # 训练/微调
+│  ├─ train.py                   # 训练/微调
+│  ├─ fpga_ctl.py                # ARM Linux FPGA 寄存器控制
+│  └─ arm_fpga_realtime.py       # ARM + FPGA + YOLO 实时演示
 ├─ src/pcb_inspector/
 │  ├─ detector.py                # 检测、切片、NMS
 │  ├─ model_registry.py          # 模型管理
 │  ├─ reporting.py               # CSV / JSON / 统计
+│  ├─ fpga.py                    # UIO/MMIO FPGA 控制接口
 │  ├─ video.py                   # 视频/摄像头逐帧检测流水线
 │  ├─ visualize.py               # 检测结果绘制
 │  └─ cli.py                     # 命令行入口
